@@ -37,7 +37,7 @@ pub struct Quantised {
     pub w: usize,
     pub h: usize,
     pub levels: u8,
-    pub step: f32,
+    pub scales: Vec<f32>,
     pub data: Vec<i16>,
 }
 

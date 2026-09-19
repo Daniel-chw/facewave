@@ -1,5 +1,9 @@
-// placeholder
+use crate::Symbol;
 
-pub fn encode()
+pub fn encode(_symbols: &[Symbol]) -> Vec<u8> {
+    todo!()
+}
 
-pub fn decode()
+pub fn decode(_bytes: &[u8]) -> Vec<Symbol> {
+    todo!()
+}

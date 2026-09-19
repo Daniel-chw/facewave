@@ -1,17 +1,17 @@
 // Facial encode pipeline
 
 use crate::Image;
-use crate::stages::{symmtery, dwt, quantise, zerotree, arithmetic}
+use crate::stages::{symmetry, dwt, quantise, zerotree, arithmetic};
 
-pub fn encode(image: &Image, dwt_depth_S: u8, dwt_depth_D: u8, quantise_step_S: f32, quantise_step_D: f32) -> Vec<u8> {
+pub fn encode(image: &Image, dwt_depth_s: u8, dwt_depth_d: u8, quantise_step_s: f32, quantise_step_d: f32) -> Vec<u8> {
 
-    let (s,d) = symmtery::split(image);
+    let (s,d) = symmetry::split(image);
 
-    let haar_s = dwt::haar(&s, dwt_depth_S);
-    let haar_d = dwt::haar(&d, dwt_depth_D);
+    let haar_s = dwt::haar(&s, dwt_depth_s);
+    let haar_d = dwt::haar(&d, dwt_depth_d);
 
-    let quantise_s = quantise::quantise(&haar_s, quantise_step_S);
-    let quantise_d = quantise::quantise(&haar_d, quantise_step_D);
+    let quantise_s = quantise::quantise(&haar_s, quantise_step_s);
+    let quantise_d = quantise::quantise(&haar_d, quantise_step_d);
 
     let zerotree_s = zerotree::encode(&quantise_s);
     let zerotree_d = zerotree::encode(&quantise_d);

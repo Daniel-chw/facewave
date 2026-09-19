@@ -1,6 +1,7 @@
 // Facial encode pipeline
 
 use crate::Image;
+use crate::format;
 use crate::stages::{symmetry, dwt, quantise, zerotree, arithmetic};
 
 pub fn encode(image: &Image, dwt_depth_s: u8, dwt_depth_d: u8, quantise_step_s: f32, quantise_step_d: f32) -> Vec<u8> {
@@ -19,5 +20,5 @@ pub fn encode(image: &Image, dwt_depth_s: u8, dwt_depth_d: u8, quantise_step_s: 
     let bytes_s = arithmetic::encode(&zerotree_s);
     let bytes_d = arithmetic::encode(&zerotree_d);
 
-    todo!("pack header + bytes.s + bytes.d using format.rs")
+    format::pack(image.w, image.h, dwt_depth_s, dwt_depth_d, quantise_step_s, quantise_step_d, &bytes_s, &bytes_d)
 }

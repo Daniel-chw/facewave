@@ -1,7 +1,7 @@
 // handles loading and saving the image
 
 use crate::Image;
-use image::{DynamicImage, GrayImage, ImageReader};
+use image::{ GrayImage, ImageReader};
 
 
 pub fn load_grayscale(path: &str) -> Result<Image, image::ImageError> {
@@ -28,6 +28,13 @@ pub fn save(img: &Image, path: &str) -> image::ImageResult<()>  {
 
 }
 
+// checks similary between images giving how lossy image is
 pub fn psnr(a: &Image, b: &Image) -> f32 {
-    todo!()
+    let n = a.data.len() as f32;
+    let mse: f32 = a.data.iter()
+                         .zip(b.data.iter())
+                         .map(|(x,y)| (x-y).powi(2))
+                         .sum::<f32>() / n;
+
+    10.0*(1.0/ mse).log10()
 }

@@ -38,3 +38,32 @@ pub fn psnr(a: &Image, b: &Image) -> f32 {
 
     10.0*(1.0/ mse).log10()
 }
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn psnr_of_identical_images_is_infinite() {
+        let img = Image { w: 2, h: 2, data: vec![0.1, 0.5, 0.9, 1.0] };
+        assert_eq!(psnr(&img, &img), f32::INFINITY);
+    }
+
+    #[test]
+    fn psnr_decreases_as_error_increases() {
+        let a = Image { w: 1, h: 3, data: vec![0.5, 0.5, 0.5] };
+        let small_error = Image { w: 1, h: 3, data: vec![0.51, 0.51, 0.51] };
+        let big_error = Image { w: 1, h: 3, data: vec![0.9, 0.9, 0.9] };
+
+        assert!(psnr(&a, &small_error) > psnr(&a, &big_error));
+    }
+
+    #[test]
+    fn psnr_of_maximally_different_images() {
+        let black = Image { w: 1, h: 2, data: vec![0.0, 0.0] };
+        let white = Image { w: 1, h: 2, data: vec![1.0, 1.0] };
+
+        assert!((psnr(&black, &white) - 0.0).abs() < 1e-5);
+    }
+}

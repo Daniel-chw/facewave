@@ -11,8 +11,8 @@ pub fn encode(image: &Image, dwt_depth_s: u8, dwt_depth_d: u8, quantise_step_s: 
     let haar_s = dwt::haar(&s, dwt_depth_s);
     let haar_d = dwt::haar(&d, dwt_depth_d);
 
-    let quantise_s = quantise::quantise(&haar_s, quantise_step_s);
-    let quantise_d = quantise::quantise(&haar_d, quantise_step_d);
+    let quantise_s = quantise::quantise(&haar_s, vec![quantise_step_s; 3 * dwt_depth_s as usize + 1]);
+    let quantise_d = quantise::quantise(&haar_d, vec![quantise_step_d; 3 * dwt_depth_d as usize + 1]);
 
     let zerotree_s = zerotree::encode(&quantise_s);
     let zerotree_d = zerotree::encode(&quantise_d);

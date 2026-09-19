@@ -1,12 +1,13 @@
 // handles loading and saving the image
 
 use crate::Image;
-use image::{ GrayImage, ImageReader};
+use image::{ GrayImage, ImageReader, imageops::FilterType};
 
 
 pub fn load_grayscale(path: &str) -> Result<Image, image::ImageError> {
     let img = ImageReader::open(path)?.decode()?;
-    let gray = img.to_luma32f();
+    let resized = img.resize_exact(128, 128, FilterType::Lanczos3);
+    let gray = resized.to_luma32f();
 
     let w = gray.width() as usize;
     let h = gray.height() as usize;

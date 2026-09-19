@@ -22,8 +22,42 @@ pub fn split(img: &Image) -> (Image, Image) {
     
 }
 
-pub fn merge(_s: &Image, _d: &Image) -> Image {
-    todo!()
+pub fn merge(s: &Image, d: &Image) -> Image {
+
+    let w_half = s.w;
+    let h = s.h;
+    let w = w_half * 2;
+    let sqrt2 = 2.0_f32.sqrt();
+
+    let mut data = Vec::with_capacity(w * h);
+
+    for (s_row, d_row) in s.data.chunks(w_half).zip(d.data.chunks(w_half)) {
+        let left = s_row.iter().zip(d_row.iter()).map(|(s, d)| (s + d) / sqrt2);
+        let right: Vec<f32> = s_row.iter().zip(d_row.iter()).map(|(s, d)| (s - d) / sqrt2).rev().collect();
+
+        data.extend(left);
+        data.extend(right);
+    }
+
+    Image { w, h, data }
+
+}
+
+#[test]
+fn merge_inverts_split() {
+    let img = Image {
+        w: 4,
+        h: 2,
+        data: vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0],
+    };
+
+    let (s, d) = split(&img);
+    let out = merge(&s, &d);
+
+    assert_eq!((out.w, out.h), (img.w, img.h));
+    for (a, b) in img.data.iter().zip(out.data.iter()) {
+        assert!((a - b).abs() < 1e-5, "mismatch: {a} vs {b}");
+    }
 }
 
 #[test]

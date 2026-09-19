@@ -1,5 +1,7 @@
 use crate::{HaarTransformed, Image};
 
+// -------------------- Helpers --------------------
+
 pub fn haar_1d(row: &[f32]) -> Vec<f32> {
 
     let sqrt2 = 2.0_f32.sqrt();
@@ -48,7 +50,7 @@ pub fn haar_2d_single_level_inverse(data: &[f32], w: usize, h: usize) -> Vec<f32
     for x in 0..w {
         let col: Vec<f32> = (0..h).map(|y| data[y * w + x]).collect();
 
-        for (y, v) in haar_1d(&col).into_iter().enumerate() {
+        for (y, v) in inverse_haar_1d(&col).into_iter().enumerate() {
             haar_col[y * w + x] = v;
         }
     }
@@ -63,14 +65,70 @@ pub fn haar_2d_single_level_inverse(data: &[f32], w: usize, h: usize) -> Vec<f32
     out
 }
 
-pub fn haar(_img: &Image, _levels: u8) -> HaarTransformed {
-    todo!()
+fn extract_region(data: &[f32], full_w: usize, region_w: usize, region_h: usize) -> Vec<f32> {
+    let mut out = Vec::with_capacity(region_w * region_h);
+    
+    for row in data.chunks(full_w).take(region_h) {
+        out.extend_from_slice(&row[..region_w]);
+    }
+
+    out
 }
 
-pub fn inverse_haar(_coeffs: &HaarTransformed) -> Image {
-    todo!()
+fn write_region(data: &mut [f32], full_w: usize, region_w: usize, region_h: usize, region: &[f32]) {
+    for (dst, src) in data
+        .chunks_mut(full_w)
+        .take(region_h)
+        .zip(region.chunks_exact(region_w))
+    {
+        dst[..region_w].copy_from_slice(src);
+    }
 }
 
+// -------------------- Haar Transform --------------------
+
+pub fn haar(img: &Image, levels: u8) -> HaarTransformed {
+    let w = img.w;
+    let h = img.h;
+    let mut data = img.data.clone();
+
+    let mut curr_w = w;
+    let mut curr_h = h;
+
+    for _ in 0..levels {
+        let region = extract_region(&data, w, curr_w, curr_h);
+        let transformed = haar_2d_single_level(&region, curr_w, curr_h);
+        write_region(&mut data, w, curr_w, curr_h, &transformed);
+
+        curr_w /= 2;
+        curr_h /= 2;
+    }
+
+    HaarTransformed { w, h, levels, data }
+}
+
+pub fn inverse_haar(coeffs: &HaarTransformed) -> Image {
+    let w = coeffs.w;
+    let h = coeffs.h;
+    let mut data = coeffs.data.clone();
+
+    let shift = coeffs.levels.saturating_sub(1) as u32;
+    let mut curr_w = w >> shift;
+    let mut curr_h = h >> shift;
+
+    for _ in 0..coeffs.levels {
+        let region = extract_region(&data, w, curr_w, curr_h);
+        let restored = haar_2d_single_level_inverse(&region, curr_w, curr_h);
+        write_region(&mut data, w, curr_w, curr_h, &restored);
+
+        curr_w *= 2;
+        curr_h *= 2;
+    }
+
+    Image { w, h, data }
+}
+
+// -------------------- Tests --------------------
 
 #[test]
 fn haar_1d_roundtrip_and_energy() {
@@ -119,5 +177,32 @@ fn single_level_roundtrip() {
 
     for (a, b) in data.iter().zip(restored.iter()) {
         assert!((a - b).abs() < 1e-4, "roundtrip mismatch: {a} vs {b}");
+    }
+}
+#[test]
+fn extract_write_region_symmetric_and_identity() {
+    let full_w = 6;
+    let full_h = 4;
+    let data: Vec<f32> = (0..full_w * full_h).map(|i| i as f32).collect();
+    let (rw, rh) = (3, 2);
+
+    let region = extract_region(&data, full_w, rw, rh);
+    assert_eq!(region, vec![0.0, 1.0, 2.0, 6.0, 7.0, 8.0]);
+
+    let mut out = data.clone();
+    write_region(&mut out, full_w, rw, rh, &region);
+    assert_eq!(out, data);
+
+    let new_region: Vec<f32> = (0..rw * rh).map(|i| -100.0 - i as f32).collect();
+    let mut out = data.clone();
+    write_region(&mut out, full_w, rw, rh, &new_region);
+    assert_eq!(extract_region(&out, full_w, rw, rh), new_region);
+
+    for y in 0..full_h {
+        for x in 0..full_w {
+            if x >= rw || y >= rh {
+                assert_eq!(out[y * full_w + x], data[y * full_w + x]);
+            }
+        }
     }
 }

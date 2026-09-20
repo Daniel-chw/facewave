@@ -106,7 +106,7 @@ fn mark_subtree(covered: &mut [bool], x: usize, y: usize, w: usize, h: usize, le
 
 // -------------------- Zerotree --------------------
 
-const THRESHOLD: u16 = 32;
+const THRESHOLD: u16 = 1;
 const REPRESENTATIVE: i16 = THRESHOLD as i16;
 
 pub fn build(q: &Quantised) -> Vec<Symbol> {

@@ -106,11 +106,14 @@ fn mark_subtree(covered: &mut [bool], x: usize, y: usize, w: usize, h: usize, le
 
 // -------------------- Zerotree --------------------
 
+const THRESHOLD: u16 = 32;
+const REPRESENTATIVE: i16 = THRESHOLD as i16;
+
 pub fn build(q: &Quantised) -> Vec<Symbol> {
 
     let mut out = Vec::new();
     let mut covered = vec![false; q.w * q.h];
-    let t: u16 = 32;
+    let t = THRESHOLD;
 
     for (x0,y0,x1,y1) in zerotree_traversal(q.w, q.h, q.levels) {
         for y in y0..y1 {
@@ -138,20 +141,38 @@ pub fn build(q: &Quantised) -> Vec<Symbol> {
     out
 }
 
-// TEMPORARY
-
 pub fn symbol_count(w: usize, h: usize, _dwt_depth: u8) -> usize {
     w * h
 }
 
-// TEMPORARY
 pub fn unbuild(symbols: &[Symbol], w: usize, h: usize, levels: u8, scales: Vec<f32>) -> Quantised {
-    let data: Vec<i16> = symbols.iter().map(|s| match s {
-        Symbol::ZeroTree => 0,
-        Symbol::Positive => 1,
-        Symbol::Negative => -1,
-        Symbol::IsolatedZero => 0,
-    }).collect();
+    let mut data = vec![0i16; w * h];
+    let mut covered = vec![false; w * h];
+    let mut next = 0;
+
+    'scan: for (x0, y0, x1, y1) in zerotree_traversal(w, h, levels) {
+        for y in y0..y1 {
+            for x in x0..x1 {
+
+                if covered[y * w + x] { continue; }
+
+                // truncated stream: leave the rest zero
+                if next >= symbols.len() { break 'scan; }
+                let symbol = symbols[next];
+                next += 1;
+
+                if symbol == Symbol::Positive || symbol == Symbol::Negative {
+                    if symbol == Symbol::Positive {data[y*w+x] = REPRESENTATIVE;}
+                    else {data[y*w+x] = -REPRESENTATIVE;}
+                }
+                else {
+                    if symbol == Symbol::ZeroTree {
+                        mark_subtree(&mut covered, x, y, w, h, levels);
+                    }
+                }
+            }
+        }
+    }
 
     Quantised { w, h, levels, scales, data }
 }
@@ -266,4 +287,53 @@ fn traversal_is_coarse_to_fine_and_matches_band_of() {
             }
         }
     }
+}
+
+#[test]
+fn unbuild_replays_build_significance_map() {
+    let (w, h, levels) = (16usize, 16usize, 3u8);
+
+    // mixed magnitudes: some over threshold, some under, some zero
+    let data: Vec<i16> = (0..w * h)
+        .map(|i| match i % 7 {
+            0 => 0,
+            1 => 5,
+            2 => -9,
+            3 => 40,
+            4 => -77,
+            5 => 32,
+            _ => -31,
+        })
+        .collect();
+    let scales = vec![1.0; 3 * levels as usize + 1];
+    let q = Quantised { w, h, levels, scales: scales.clone(), data: data.clone() };
+
+    let symbols = build(&q);
+    assert!(symbols.len() <= symbol_count(w, h, levels), "symbol_count must bound build");
+
+    let back = unbuild(&symbols, w, h, levels, scales);
+    assert_eq!((back.w, back.h, back.levels), (w, h, levels));
+
+    // every significant coeff keeps its sign; every insignificant one decodes to zero
+    for i in 0..w * h {
+        let (orig, got) = (data[i], back.data[i]);
+        if orig.unsigned_abs() >= THRESHOLD {
+            assert_eq!(got.signum(), orig.signum(), "sign lost at {i}: {orig} -> {got}");
+            assert_eq!(got.unsigned_abs(), THRESHOLD, "magnitude not representative at {i}");
+        } else {
+            assert_eq!(got, 0, "insignificant {orig} at {i} decoded as {got}");
+        }
+    }
+}
+
+#[test]
+fn unbuild_of_truncated_stream_zero_fills() {
+    let (w, h, levels) = (8usize, 8usize, 2u8);
+    let q = test_quantised(w, h, levels, &[(7, 7), (0, 0), (3, 3)]);
+    let scales = q.scales.clone();
+
+    let symbols = build(&q);
+    let back = unbuild(&symbols[..symbols.len() / 2], w, h, levels, scales);
+
+    assert_eq!(back.data.len(), w * h, "must still be a full-size image");
 }

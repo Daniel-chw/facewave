@@ -17,8 +17,8 @@ pub fn decode(bytes: &[u8]) -> Image {
     let symbols_s = arithmetic::decode_symbols(&bytes_s, symbol_count_s);
     let symbols_d = arithmetic::decode_symbols(&bytes_d, symbol_count_d);
 
-    let quantised_s = zerotree::unscan(&symbols_s, half_w, h, dwt_depth_s, scales_s);
-    let quantised_d = zerotree::unscan(&symbols_d, half_w, h, dwt_depth_d, scales_d);
+    let quantised_s = zerotree::unbuild(&symbols_s, half_w, h, dwt_depth_s, scales_s);
+    let quantised_d = zerotree::unbuild(&symbols_d, half_w, h, dwt_depth_d, scales_d);
 
     let haar_s = quantise::dequantise(&quantised_s);
     let haar_d = quantise::dequantise(&quantised_d);

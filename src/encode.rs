@@ -14,8 +14,8 @@ pub fn encode(image: &Image, dwt_depth_s: u8, dwt_depth_d: u8, scales_s: Vec<f32
     let quantised_s = quantise::quantise(&haar_s, scales_s);
     let quantised_d = quantise::quantise(&haar_d, scales_d);
 
-    let symbols_s = zerotree::scan(&quantised_s);
-    let symbols_d = zerotree::scan(&quantised_d);
+    let symbols_s = zerotree::build(&quantised_s);
+    let symbols_d = zerotree::build(&quantised_d);
 
     let bytes_s = arithmetic::encode_symbols(&symbols_s);
     let bytes_d = arithmetic::encode_symbols(&symbols_d);

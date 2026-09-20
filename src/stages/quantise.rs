@@ -2,6 +2,7 @@ use crate::{Band, HaarTransformed, Quantised};
 
 // -------------------- Helpers --------------------
 
+#[allow(clippy::too_many_arguments)]
 fn quantise_quadrant(data: &[f32], out: &mut [i16], full_w: usize, x0: usize, y0: usize, x1: usize, y1: usize, scale: f32) {
     for y in y0..y1 {
         for x in x0..x1 {
@@ -11,6 +12,7 @@ fn quantise_quadrant(data: &[f32], out: &mut [i16], full_w: usize, x0: usize, y0
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn dequantise_quadrant(data: &[i16], out: &mut [f32], full_w: usize, x0: usize, y0: usize, x1: usize, y1: usize, scale: f32) {
     for y in y0..y1 {
         for x in x0..x1 {

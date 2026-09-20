@@ -1,7 +1,7 @@
 use crate::{Quantised, Symbol};
 
 // TEMPORARY
-pub fn encode(q: &Quantised) -> Vec<Symbol> {
+pub fn scan(q: &Quantised) -> Vec<Symbol> {
     q.data.iter().map(|&v| {
         match v {
             0 => Symbol::ZeroTree,
@@ -18,7 +18,7 @@ pub fn symbol_count(w: usize, h: usize, _dwt_depth: u8) -> usize {
 }
 
 // TEMPORARY
-pub fn decode(symbols: &[Symbol], w: usize, h: usize, levels: u8, scales: Vec<f32>) -> Quantised {
+pub fn unscan(symbols: &[Symbol], w: usize, h: usize, levels: u8, scales: Vec<f32>) -> Quantised {
     let data: Vec<i16> = symbols.iter().map(|s| match s {
         Symbol::ZeroTree => 0,
         Symbol::Positive => 1,

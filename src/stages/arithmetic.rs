@@ -23,7 +23,7 @@ fn byte_to_symbol(b: u8) -> Symbol {
     }
 }
 
-pub fn encode(symbols: &[Symbol]) -> Vec<u8> {
+pub fn encode_symbols(symbols: &[Symbol]) -> Vec<u8> {
     let raw: Vec<u8> = symbols.iter().map(|&s| symbol_to_byte(s)).collect();
 
     let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
@@ -31,7 +31,7 @@ pub fn encode(symbols: &[Symbol]) -> Vec<u8> {
     encoder.finish().unwrap()
 }
 
-pub fn decode(bytes: &[u8], count: usize) -> Vec<Symbol> {
+pub fn decode_symbols(bytes: &[u8], count: usize) -> Vec<Symbol> {
     let mut decoder = ZlibDecoder::new(bytes);
     let mut raw = Vec::new();
     decoder.read_to_end(&mut raw).unwrap();

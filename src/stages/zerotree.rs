@@ -67,6 +67,25 @@ pub fn is_subtree_zero(q: &Quantised, x: usize, y: usize) -> bool {
     true
 }
 
+// band scan order, coarse to fine, like fig.5 in Jerome M. Shapiro EZW paper
+// we create list of bands we must visit, [LL3, LH3, HL3, HH3, LH2, ...]
+pub fn zerotree_traversal(w: usize, h: usize, levels: u8) -> Vec<(usize, usize, usize, usize)> {
+
+    let mut bands = Vec::with_capacity(3 * levels as usize + 1);
+    bands.push((0, 0, w >> levels, h >> levels));
+
+    for level in (1..=levels).rev() {
+        let (cw, ch) = (w >> (level - 1), h >> (level - 1));
+        let (hw, hh) = (cw / 2, ch / 2);
+
+        bands.push((hw, 0, cw, hh));   // LH
+        bands.push((0, hh, hw, ch));   // HL
+        bands.push((hw, hh, cw, ch));  // HH
+    }
+
+    bands
+}
+
 
 // -------------------- Tempory --------------------
 
@@ -164,5 +183,49 @@ fn ll_root_sees_its_three_detail_children() {
     for child in [(4, 0), (0, 4), (4, 4)] {
         let q = test_quantised(8, 8, 1, &[child]);
         assert!(!is_subtree_zero(&q, 0, 0), "child {child:?}");
+    }
+}
+
+#[test]
+fn traversal_covers_every_coeff_exactly_once() {
+    for (w, h) in [(8, 8), (16, 8)] {
+        for levels in 1..=3u8 {
+            let bands = zerotree_traversal(w, h, levels);
+            assert_eq!(bands.len(), 3 * levels as usize + 1);
+
+            let mut seen = vec![0u8; w * h];
+            for (x0, y0, x1, y1) in bands {
+                for y in y0..y1 {
+                    for x in x0..x1 {
+                        seen[y * w + x] += 1;
+                    }
+                }
+            }
+            for (i, &n) in seen.iter().enumerate() {
+                assert_eq!(n, 1, "({},{}) covered {n} times, w{w} h{h} l{levels}", i % w, i / w);
+            }
+        }
+    }
+}
+
+#[test]
+fn traversal_is_coarse_to_fine_and_matches_band_of() {
+    let (w, h, levels) = (8usize, 8usize, 2u8);
+    let bands = zerotree_traversal(w, h, levels);
+
+    // expected level+band per slot: LL first, then level 2 LH/HL/HH, then level 1
+    let expected = [
+        (levels, Band::LL),
+        (2, Band::LH), (2, Band::HL), (2, Band::HH),
+        (1, Band::LH), (1, Band::HL), (1, Band::HH),
+    ];
+
+    for (&(x0, y0, x1, y1), &want) in bands.iter().zip(expected.iter()) {
+        assert!(x0 < x1 && y0 < y1, "empty region {:?}", (x0, y0, x1, y1));
+        for y in y0..y1 {
+            for x in x0..x1 {
+                assert_eq!(level_and_band_of(x, y, w, h, levels), want, "({x},{y})");
+            }
+        }
     }
 }

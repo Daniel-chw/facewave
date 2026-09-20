@@ -49,4 +49,6 @@ pub enum Symbol {
     IsolatedZero,
     Positive,
     Negative,
+    RefineOne,
+    RefineZero,
 }

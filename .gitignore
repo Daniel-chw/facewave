@@ -1,3 +1,6 @@
 /target
 /devlog
 /output
+tests/results
+tests/sweep.sh
+/results

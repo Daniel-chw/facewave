@@ -1,24 +1,44 @@
 // entry point for binary crate
 
+use clap::Parser;
+
+#[derive(Parser)]
+struct Args {
+    #[arg(long, default_value = "tests/faces/face.jpg")]
+    input: String,
+    #[arg(long, default_value_t = 4)]
+    levels_s: u8,
+    #[arg(long, default_value_t = 4)]
+    levels_d: u8,
+    #[arg(long, default_value_t = 0.25)]
+    step_s: f32,
+    #[arg(long, default_value_t = 0.25)]
+    step_d: f32,
+    /// optional path to write the decoded image to
+    #[arg(long, default_value = "output/output.png")]
+    output: Option<String>,
+}
+
+// quantise wants one step per band: 3 detail bands per level, plus LL
+fn scales(step: f32, levels: u8) -> Vec<f32> {
+    vec![step; 3 * levels as usize + 1]
+}
+
 fn main() {
-    let original = facewave::image::load_grayscale("tests/faces/face.jpg")
-        .expect("failed to load test image");
+    let a = Args::parse();
 
-    let levels: u8 = 1;
+    let img = facewave::image::load_grayscale(&a.input).unwrap_or_else(|e| panic!("could not load {}: {e}", a.input));
 
-    let n_scales = 3 * levels as usize + 1;
-    let scales_s: Vec<f32> = vec![2.0; n_scales];
-    let scales_d: Vec<f32> = vec![0.5; n_scales];
+    let bytes = facewave::encode::encode(&img, a.levels_s, a.levels_d, scales(a.step_s, a.levels_s), scales(a.step_d, a.levels_d));
+    let out = facewave::decode::decode(&bytes);
 
-    let bytes = facewave::encode::encode(&original, levels, levels, scales_s, scales_d);
-    let reconstructed = facewave::decode::decode(&bytes);
+    if let Some(path) = &a.output {
+        facewave::image::save(&out, path)
+            .unwrap_or_else(|e| panic!("could not save {path}: {e}"));
+    }
 
-    // image::save will not create parent directories
-    std::fs::create_dir_all("output").expect("could not create output dir");
-
-    facewave::image::save(&original, "output/original.png").expect("save failed");
-    facewave::image::save(&reconstructed, "output/output.png").expect("save failed");
-
-    let quality = facewave::image::psnr(&original, &reconstructed);
-    println!("PSNR: {quality} dB");
+      let bpp = 8.0 * bytes.len() as f64 / (img.w * img.h) as f64;
+      println!("{},{},{},{},{},{:.3},{:.2}",
+          a.levels_s, a.levels_d, a.step_s, a.step_d, bytes.len(), bpp,
+          facewave::image::psnr(&img, &out));
 }

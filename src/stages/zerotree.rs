@@ -87,17 +87,55 @@ pub fn zerotree_traversal(w: usize, h: usize, levels: u8) -> Vec<(usize, usize, 
 }
 
 
-// -------------------- Tempory --------------------
+// true if every descendant of (x, y) is below the threshold
+pub fn is_subtree_insignificant(q: &Quantised, x: usize, y: usize, t: u16) -> bool {
+    children_of(x, y, q.w, q.h, q.levels).into_iter().all(|(cx, cy)| {
+        q.data[cy * q.w + cx].unsigned_abs() < t && is_subtree_insignificant(q, cx, cy, t)
+    })
+}
 
-// TEMPORARY
+// marks descendants of (x, y) as coded; the root itself keeps its own symbol
+fn mark_subtree(covered: &mut [bool], x: usize, y: usize, w: usize, h: usize, levels: u8) {
+    let mut stack = children_of(x, y, w, h, levels);
+    while let Some((cx, cy)) = stack.pop() {
+        covered[cy * w + cx] = true;
+        stack.extend(children_of(cx, cy, w, h, levels));
+    }
+}
+
+
+// -------------------- Zerotree --------------------
+
 pub fn build(q: &Quantised) -> Vec<Symbol> {
-    q.data.iter().map(|&v| {
-        match v {
-            0 => Symbol::ZeroTree,
-            v if v > 0 => Symbol::Positive,
-            _ => Symbol::Negative,
+
+    let mut out = Vec::new();
+    let mut covered = vec![false; q.w * q.h];
+    let t: u16 = 32;
+
+    for (x0,y0,x1,y1) in zerotree_traversal(q.w, q.h, q.levels) {
+        for y in y0..y1 {
+            for x in x0..x1 {
+
+                if covered[y * q.w + x] { continue; }
+                let p = q.data[y*q.w+x];
+
+                if p.unsigned_abs() >= t {
+                    if p > 0 {out.push(Symbol::Positive);}
+                    else {out.push(Symbol::Negative);}
+                }
+                else {
+                    if is_subtree_insignificant(q, x, y, t){
+                        mark_subtree(&mut covered, x, y, q.w, q.h, q.levels);
+                        out.push(Symbol::ZeroTree);
+                    }
+                    else {
+                        out.push(Symbol::IsolatedZero);
+                    }
+                }
+            }
         }
-    }).collect()
+    }
+    out
 }
 
 // TEMPORARY

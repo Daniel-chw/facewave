@@ -1,6 +1,6 @@
 // handles .face data conversions
 
-pub type Unpacked = (usize, usize, u8, u8, Vec<f32>, Vec<f32>, Vec<u8>, Vec<u8>);
+pub type Unpacked = (usize, usize, u8, u8, u16, u16, Vec<f32>, Vec<f32>, Vec<u8>, Vec<u8>);
 
 fn pack_scales(out: &mut Vec<u8>, scales: &[f32]) {
     out.extend_from_slice(&(scales.len() as u32).to_le_bytes());
@@ -34,7 +34,7 @@ fn unpack_bytes(bytes: &[u8], at: usize) -> (Vec<u8>, usize) {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn pack(w: usize, h: usize, levels_s: u8, levels_d: u8, scales_s: &[f32], scales_d: &[f32], bytes_s: &[u8], bytes_d: &[u8]) -> Vec<u8> {
+pub fn pack(w: usize, h: usize, levels_s: u8, levels_d: u8, t0_s: u16, t0_d: u16, scales_s: &[f32], scales_d: &[f32], bytes_s: &[u8], bytes_d: &[u8]) -> Vec<u8> {
     let mut out = Vec::new();
 
     out.extend_from_slice(&(w as u32).to_le_bytes());
@@ -42,6 +42,10 @@ pub fn pack(w: usize, h: usize, levels_s: u8, levels_d: u8, scales_s: &[f32], sc
 
     out.push(levels_s);
     out.push(levels_d);
+
+    // zerotree start thresholds, one per half-image
+    out.extend_from_slice(&t0_s.to_le_bytes());
+    out.extend_from_slice(&t0_d.to_le_bytes());
 
     pack_scales(&mut out, scales_s);
     pack_scales(&mut out, scales_d);
@@ -59,13 +63,16 @@ pub fn unpack(bytes: &[u8]) -> Unpacked {
     let levels_s = bytes[8];
     let levels_d = bytes[9];
 
-    let (scales_s, at) = unpack_scales(bytes, 10);
+    let t0_s = u16::from_le_bytes(bytes[10..12].try_into().unwrap());
+    let t0_d = u16::from_le_bytes(bytes[12..14].try_into().unwrap());
+
+    let (scales_s, at) = unpack_scales(bytes, 14);
     let (scales_d, at) = unpack_scales(bytes, at);
 
     let (bytes_s, at) = unpack_bytes(bytes, at);
     let (bytes_d, _) = unpack_bytes(bytes, at);
 
-    (w, h, levels_s, levels_d, scales_s, scales_d, bytes_s, bytes_d)
+    (w, h, levels_s, levels_d, t0_s, t0_d, scales_s, scales_d, bytes_s, bytes_d)
 }
 
 #[test]
@@ -75,10 +82,11 @@ fn pack_unpack_roundtrip() {
     let s = vec![1u8, 2, 3, 4, 5];
     let d = vec![9u8, 8];
 
-    let packed = pack(128, 128, 1, 2, &scales_s, &scales_d, &s, &d);
-    let (w, h, levels_s, levels_d, out_scales_s, out_scales_d, out_s, out_d) = unpack(&packed);
+    let packed = pack(128, 128, 1, 2, 64, 256, &scales_s, &scales_d, &s, &d);
+    let (w, h, levels_s, levels_d, t0_s, t0_d, out_scales_s, out_scales_d, out_s, out_d) = unpack(&packed);
 
     assert_eq!((w, h, levels_s, levels_d), (128, 128, 1, 2));
+    assert_eq!((t0_s, t0_d), (64, 256));
     assert_eq!(out_scales_s, scales_s);
     assert_eq!(out_scales_d, scales_d);
     assert_eq!(out_s, s);

@@ -6,16 +6,16 @@ use clap::Parser;
 struct Args {
     #[arg(long, default_value = "tests/faces/face.jpg")]
     input: String,
-    #[arg(long, default_value_t = 1)]
+    #[arg(long, default_value_t = 4)]
     levels_s: u8,
-    #[arg(long, default_value_t = 1)]
+    #[arg(long, default_value_t = 4)]
     levels_d: u8,
-    #[arg(long, default_value_t = 2.0)]
+    #[arg(long, default_value_t = 0.25)]
     step_s: f32,
     #[arg(long, default_value_t = 0.25)]
     step_d: f32,
     /// optional path to write the decoded image to
-    #[arg(long)]
+    #[arg(long, default_value = "output/output.png")]
     output: Option<String>,
 }
 

@@ -10,6 +10,8 @@ fn symbol_to_byte(s: Symbol) -> u8 {
         Symbol::IsolatedZero => 1,
         Symbol::Positive => 2,
         Symbol::Negative => 3,
+        Symbol::RefineOne => 4,
+        Symbol::RefineZero => 5,
     }
 }
 
@@ -19,6 +21,8 @@ fn byte_to_symbol(b: u8) -> Symbol {
         1 => Symbol::IsolatedZero,
         2 => Symbol::Positive,
         3 => Symbol::Negative,
+        4 => Symbol::RefineOne,
+        5 => Symbol::RefineZero,
         _ => panic!("invalid symbol byte: {b}"),
     }
 }

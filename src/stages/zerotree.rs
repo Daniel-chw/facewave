@@ -109,7 +109,11 @@ fn mark_subtree(covered: &mut [bool], x: usize, y: usize, w: usize, h: usize, le
 const THRESHOLD: u16 = 1;
 const REPRESENTATIVE: i16 = THRESHOLD as i16;
 
-pub fn build(q: &Quantised) -> Vec<Symbol> {
+pub fn symbol_count(w: usize, h: usize, _dwt_depth: u8) -> usize {
+    w * h
+}
+
+pub fn dominant_pass(q: &Quantised) -> Vec<Symbol> {
 
     let mut out = Vec::new();
     let mut covered = vec![false; q.w * q.h];
@@ -141,11 +145,7 @@ pub fn build(q: &Quantised) -> Vec<Symbol> {
     out
 }
 
-pub fn symbol_count(w: usize, h: usize, _dwt_depth: u8) -> usize {
-    w * h
-}
-
-pub fn unbuild(symbols: &[Symbol], w: usize, h: usize, levels: u8, scales: Vec<f32>) -> Quantised {
+pub fn dominant_unpass(symbols: &[Symbol], w: usize, h: usize, levels: u8, scales: Vec<f32>) -> Quantised {
     let mut data = vec![0i16; w * h];
     let mut covered = vec![false; w * h];
     let mut next = 0;
@@ -175,6 +175,37 @@ pub fn unbuild(symbols: &[Symbol], w: usize, h: usize, levels: u8, scales: Vec<f
     }
 
     Quantised { w, h, levels, scales, data }
+}
+
+pub fn subordinate_pass(q: &Quantised, t: u16, sig_list: &[(usize, usize)]) -> Vec<Symbol> {
+    let mut out: Vec<Symbol> = Vec::new();
+    for (x,y) in sig_list {
+        if q.data[y*q.w + x].unsigned_abs() & t != 0 {
+            out.push(Symbol::RefineOne);
+        }
+        else {
+            out.push(Symbol::RefineZero);
+        }
+    }
+    out
+}
+
+pub fn subordinate_unpass(q: &mut Quantised, t: u16, sig_list: &[(usize, usize)], symbols: &[Symbol]) {
+    let mut next = 0;
+    for (x,y) in sig_list {
+
+        if next >= symbols.len() { break; }
+        let symbol = symbols[next];
+        next += 1;
+
+        if symbol == Symbol::RefineOne {
+            let v = q.data[y*q.w + x];
+            let mag = (v.unsigned_abs() | t) as i16;
+
+            if v < 0 {q.data[y*q.w + x] = -mag;}
+            else {q.data[y*q.w + x] = mag;}
+        }
+    }
 }
 
 // -------------------- Testers --------------------
@@ -308,10 +339,10 @@ fn unbuild_replays_build_significance_map() {
     let scales = vec![1.0; 3 * levels as usize + 1];
     let q = Quantised { w, h, levels, scales: scales.clone(), data: data.clone() };
 
-    let symbols = build(&q);
+    let symbols = dominant_pass(&q);
     assert!(symbols.len() <= symbol_count(w, h, levels), "symbol_count must bound build");
 
-    let back = unbuild(&symbols, w, h, levels, scales);
+    let back = dominant_unpass(&symbols, w, h, levels, scales);
     assert_eq!((back.w, back.h, back.levels), (w, h, levels));
 
     // every significant coeff keeps its sign; every insignificant one decodes to zero
@@ -332,8 +363,54 @@ fn unbuild_of_truncated_stream_zero_fills() {
     let q = test_quantised(w, h, levels, &[(7, 7), (0, 0), (3, 3)]);
     let scales = q.scales.clone();
 
-    let symbols = build(&q);
-    let back = unbuild(&symbols[..symbols.len() / 2], w, h, levels, scales);
+    let symbols = dominant_pass(&q);
+    let back = dominant_unpass(&symbols[..symbols.len() / 2], w, h, levels, scales);
 
     assert_eq!(back.data.len(), w * h, "must still be a full-size image");
+}
+
+#[test]
+fn subordinate_unpass_inverts_subordinate_pass() {
+    let (w, h, levels) = (8usize, 8usize, 2u8);
+    let scales = vec![1.0; 3 * levels as usize + 1];
+
+    // magnitudes in [64, 128), so 64 is the dominant threshold and 32..1 refine
+    let data: Vec<i16> = (0..w * h)
+        .map(|i| {
+            let mag = 64 + (i as i16 % 64);
+            if i % 2 == 0 { mag } else { -mag }
+        })
+        .collect();
+    let q = Quantised { w, h, levels, scales: scales.clone(), data: data.clone() };
+
+    let sig_list: Vec<(usize, usize)> = (0..h).flat_map(|y| (0..w).map(move |x| (x, y))).collect();
+
+    // decoder starts at the dominant threshold, then refines bit by bit
+    let mut back = Quantised {
+        w, h, levels, scales,
+        data: data.iter().map(|v| v.signum() * 64).collect(),
+    };
+    for bit in [32u16, 16, 8, 4, 2, 1] {
+        let refinements = subordinate_pass(&q, bit, &sig_list);
+        assert_eq!(refinements.len(), sig_list.len());
+        subordinate_unpass(&mut back, bit, &sig_list, &refinements);
+    }
+
+    // all refinement bits restored: reconstruction is exact
+    for i in 0..w * h {
+        assert_eq!(back.data[i], data[i], "at {i}");
+    }
+}
+
+#[test]
+fn subordinate_unpass_tolerates_short_symbol_stream() {
+    let (w, h, levels) = (8usize, 8usize, 2u8);
+    let q = test_quantised(w, h, levels, &[(1, 1), (5, 5)]);
+    let sig_list = [(1usize, 1usize), (5, 5)];
+
+    let mut back = Quantised { w, h, levels, scales: q.scales.clone(), data: vec![1i16; w * h] };
+    subordinate_unpass(&mut back, 32, &sig_list, &[Symbol::RefineOne]);
+
+    assert_eq!(back.data[1 * w + 1], 33, "first entry refined");
+    assert_eq!(back.data[5 * w + 5], 1, "second entry left at coarse value");
 }

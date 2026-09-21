@@ -1,19 +1,31 @@
 // handles loading and saving the image
 
 use crate::Image;
-use image::{ GrayImage, ImageReader, imageops::FilterType};
+use crate::stages::align;
+use image::{ GrayImage, ImageBuffer, Luma, ImageReader, imageops::{self, FilterType}};
+
+const SIZE: u32 = 128;
 
 
 pub fn load_grayscale(path: &str) -> Result<Image, image::ImageError> {
-    let img = ImageReader::open(path)?.decode()?;
-    let resized = img.resize_exact(128, 128, FilterType::Lanczos3);
-    let gray = resized.to_luma32f();
+    let gray = ImageReader::open(path)?.decode()?.to_luma32f();
 
-    let w = gray.width() as usize;
-    let h = gray.height() as usize;
-    let data = gray.into_raw();
+    // search on a small copy (same aspect) since rotation and fractional shift don't depend on scale
+    let (w, h) = gray.dimensions();
+    let small_h = ((h as f32 * SIZE as f32 / w as f32).round() as u32).max(1);
+    let small = imageops::resize(&gray, SIZE, small_h, FilterType::Triangle);
+    let alignment = align::find(&to_image(small));
 
-    Ok(Image { w, h, data })
+    let aligned = align::apply(&to_image(gray), alignment);
+    let aligned: ImageBuffer<Luma<f32>, Vec<f32>> =
+        ImageBuffer::from_raw(aligned.w as u32, aligned.h as u32, aligned.data).unwrap();
+
+    Ok(to_image(imageops::resize(&aligned, SIZE, SIZE, FilterType::Lanczos3)))
+}
+
+fn to_image(buf: ImageBuffer<Luma<f32>, Vec<f32>>) -> Image {
+    let (w, h) = buf.dimensions();
+    Image { w: w as usize, h: h as usize, data: buf.into_raw() }
 
 }
 

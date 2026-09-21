@@ -126,7 +126,7 @@ impl AdaptiveDist {
         }
     }
 
-    }
+}
 
 // -------------------- Coder --------------------
 
@@ -344,3 +344,200 @@ pub fn decode_symbols(bytes: &[u8]) -> Streams {
 }
 
 // -------------------- Tests --------------------
+
+#[cfg(test)]
+mod adaptive_tests {
+    use super::*;
+
+    struct Rng(u64);
+
+    impl Rng {
+        fn next_u64(&mut self) -> u64 {
+            let mut x = self.0;
+            x ^= x >> 12;
+            x ^= x << 25;
+            x ^= x >> 27;
+            self.0 = x;
+            x.wrapping_mul(0x2545_F491_4F6C_DD1D)
+        }
+
+        fn below(&mut self, n: u64) -> u64 {
+            self.next_u64() % n
+        }
+    }
+
+    fn draw(rng: &mut Rng, len: usize, weights: &[u32]) -> Vec<usize> {
+        let total: u64 = weights.iter().map(|&w| w as u64).sum();
+        (0..len)
+            .map(|_| {
+                let mut t = rng.below(total);
+                weights
+                    .iter()
+                    .position(|&w| {
+                        if t < w as u64 {
+                            true
+                        } else {
+                            t -= w as u64;
+                            false
+                        }
+                    })
+                    .unwrap()
+            })
+            .collect()
+    }
+
+    // fresh models both sides: the decoder has to rebuild the same table
+    fn roundtrip(symbols: &[usize], n: usize, cap: u32) {
+        let encoded = encode_adaptive(symbols, &mut AdaptiveDist::new(n, cap));
+        let decoded = decode_adaptive(&encoded, symbols.len(), &mut AdaptiveDist::new(n, cap));
+        assert_eq!(decoded, symbols, "n = {n}, cap = {cap}, len = {}", symbols.len());
+    }
+
+    fn roundtrips_random_sequences(n: usize, seed: u64) {
+        let mut rng = Rng(seed);
+
+        for _ in 0..100 {
+            let len = rng.below(10_001) as usize;
+            // Sources range from flat to nearly degenerate, so the model has
+            // to cope with both no signal and a hard-won skew.
+            let source: Vec<u32> = (0..n).map(|_| 1 + rng.below(1_000) as u32).collect();
+            // Caps from "halves constantly" to "never halves".
+            let cap = [2 * n as u32, 64, 1 << 10, MAX_TOTAL][rng.below(4) as usize];
+
+            roundtrip(&draw(&mut rng, len, &source), n, cap);
+        }
+    }
+
+    #[test]
+    fn roundtrips_random_sequences_over_4_symbols() {
+        roundtrips_random_sequences(4, 0xa5a5_1234_dead_0001);
+    }
+
+    #[test]
+    fn roundtrips_random_sequences_over_6_symbols() {
+        roundtrips_random_sequences(6, 0x5a5a_4321_beef_0002);
+    }
+
+    #[test]
+    fn roundtrips_edge_cases() {
+        for n in [2, 4, 6] {
+            for cap in [2 * n as u32, 64, MAX_TOTAL] {
+                roundtrip(&[], n, cap);
+                for s in 0..n {
+                    roundtrip(&[s], n, cap);
+                    roundtrip(&vec![s; 10_000], n, cap);
+                }
+                roundtrip(&(0..10_000).map(|i| i % n).collect::<Vec<_>>(), n, cap);
+            }
+        }
+    }
+
+    #[test]
+    fn adaptation_converges_on_a_skewed_source() {
+        let mut rng = Rng(0xfeed_face_0000_1234);
+        // 6 symbols, one dominant: entropy is ~0.42 bits/symbol.
+        let weights = [60_000, 200, 200, 200, 200, 200];
+        let symbols = draw(&mut rng, 20_000, &weights);
+
+        let adaptive = encode_adaptive(&symbols, &mut AdaptiveDist::new(6, MAX_TOTAL));
+
+        let bits_per_symbol = 8.0 * adaptive.len() as f64 / symbols.len() as f64;
+        assert!(bits_per_symbol < 0.50, "got {bits_per_symbol} bits/symbol");
+        // the whole point: it learns the skew without being told it, so it must
+        // beat the log2(6) bits a flat model would spend, by a wide margin
+        let flat = 6f64.log2() * symbols.len() as f64 / 8.0;
+        assert!((adaptive.len() as f64) * 4.0 < flat, "adaptive {} vs flat {flat:.0}", adaptive.len());
+
+        assert_eq!(decode_adaptive(&adaptive, symbols.len(), &mut AdaptiveDist::new(6, MAX_TOTAL)), symbols);
+    }
+
+    #[test]
+    fn a_tight_cap_costs_precision_but_stays_correct() {
+        let mut rng = Rng(0xcafe_d00d_0000_4321);
+        let weights = [60_000, 200, 200, 200, 200, 200];
+        let symbols = draw(&mut rng, 20_000, &weights);
+
+        let tight = encode_adaptive(&symbols, &mut AdaptiveDist::new(6, 16));
+        let loose = encode_adaptive(&symbols, &mut AdaptiveDist::new(6, MAX_TOTAL));
+
+        assert!(tight.len() > loose.len(), "tight {} vs loose {}", tight.len(), loose.len());
+        assert_eq!(decode_adaptive(&tight, symbols.len(), &mut AdaptiveDist::new(6, 16)), symbols);
+    }
+}
+
+#[cfg(test)]
+mod symbol_tests {
+    use super::*;
+    use crate::Symbol::*;
+
+    // splits the way zerotree::unbuild does, the contract the pipeline relies on
+    fn split(symbols: &[Symbol]) -> Streams {
+        let (dominant, refinement) = symbols
+            .iter()
+            .partition(|&&s| !matches!(s, RefineOne | RefineZero));
+        Streams { dominant, refinement }
+    }
+
+    fn roundtrip(symbols: &[Symbol]) {
+        let decoded = decode_symbols(&encode_symbols(symbols));
+        assert_eq!(decoded, split(symbols), "len = {}", symbols.len());
+    }
+
+    #[test]
+    fn roundtrips_random_streams() {
+        let mut rng = Rng(0x00c0_ffee_0000_0001);
+        let alphabet = [ZeroTree, IsolatedZero, Positive, Negative, RefineOne, RefineZero];
+
+        for _ in 0..200 {
+            let len = rng.below(10_001) as usize;
+            let symbols: Vec<Symbol> =
+                (0..len).map(|_| alphabet[rng.below(6) as usize]).collect();
+            roundtrip(&symbols);
+        }
+    }
+
+    #[test]
+    fn roundtrips_edge_cases() {
+        roundtrip(&[]);
+        for s in [ZeroTree, IsolatedZero, Positive, Negative, RefineOne, RefineZero] {
+            roundtrip(&[s]);
+            roundtrip(&vec![s; 10_000]);
+        }
+        // one context entirely absent
+        roundtrip(&vec![ZeroTree; 5_000]);
+        roundtrip(&vec![RefineOne; 5_000]);
+    }
+
+    #[test]
+    fn splitting_contexts_beats_one_shared_table() {
+        let mut rng = Rng(0x00c0_ffee_0000_0003);
+        // Skewed dominant symbols next to near-random refinement bits: the
+        // case where a shared table loses, since the refinements flatten it.
+        let mut symbols = Vec::new();
+        for _ in 0..20 {
+            for _ in 0..1_000 {
+                symbols.push(if rng.below(20) == 0 { Positive } else { ZeroTree });
+            }
+            for _ in 0..1_000 {
+                symbols.push(if rng.below(2) == 0 { RefineOne } else { RefineZero });
+            }
+        }
+
+        let split_size = encode_symbols(&symbols).len();
+
+        let shared: Vec<usize> = symbols
+            .iter()
+            .map(|&s| match s {
+                ZeroTree => 0,
+                IsolatedZero => 1,
+                Positive => 2,
+                Negative => 3,
+                RefineOne => 4,
+                RefineZero => 5,
+            })
+            .collect();
+        let shared_size = encode_adaptive(&shared, &mut AdaptiveDist::new(6, CONTEXT_CAP)).len();
+
+        assert!(split_size < shared_size, "split {split_size} vs shared {shared_size}");
+    }
+}

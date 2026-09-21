@@ -345,3 +345,59 @@ impl Context {
         }
     }
 }
+
+// each stream in the order its pass emits it
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Streams {
+    pub dominant: Vec<Symbol>,
+    pub refinement: Vec<Symbol>,
+}
+
+pub fn encode_symbols(symbols: &[Symbol]) -> Vec<u8> {
+    let mut dominant = Vec::new();
+    let mut refinement = Vec::new();
+    for &s in symbols {
+        let ctx = Context::of(s);
+        match ctx {
+            Context::Dominant => dominant.push(ctx.index_of(s)),
+            Context::Refinement => refinement.push(ctx.index_of(s)),
+        }
+    }
+
+    let coded_d = encode_adaptive(&dominant, &mut Context::Dominant.model(), None);
+    let coded_r = encode_adaptive(&refinement, &mut Context::Refinement.model(), None);
+
+    let mut out = Vec::with_capacity(coded_d.len() + coded_r.len() + 12);
+    put_varint(&mut out, dominant.len() as u64);
+    put_varint(&mut out, refinement.len() as u64);
+    put_varint(&mut out, coded_d.len() as u64);
+    out.extend_from_slice(&coded_d);
+    out.extend_from_slice(&coded_r);
+    out
+}
+
+pub fn decode_symbols(bytes: &[u8]) -> Streams {
+    let mut at = 0;
+    let n_dominant = take_varint(bytes, &mut at) as usize;
+    let n_refinement = take_varint(bytes, &mut at) as usize;
+    let dominant_len = take_varint(bytes, &mut at) as usize;
+
+    let (coded_d, coded_r) = bytes[at..].split_at(dominant_len);
+
+    let to_symbols = |indices: Vec<usize>, ctx: Context| {
+        indices.into_iter().map(|i| ctx.symbol_at(i)).collect()
+    };
+
+    Streams {
+        dominant: to_symbols(
+            decode_adaptive(coded_d, n_dominant, &mut Context::Dominant.model(), None),
+            Context::Dominant,
+        ),
+        refinement: to_symbols(
+            decode_adaptive(coded_r, n_refinement, &mut Context::Refinement.model(), None),
+            Context::Refinement,
+        ),
+    }
+}
+
+// -------------------- Tests --------------------

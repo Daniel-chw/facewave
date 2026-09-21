@@ -30,6 +30,12 @@ pub enum Command {
         #[arg(short, long)]
         output: String,
     },
+    /// Encode and decode in memory, print one CSV row of stats
+    Eval {
+        input: String,
+        #[command(flatten)]
+        params: Params,
+    },
 }
 
 #[derive(Args)]
@@ -94,11 +100,18 @@ fn scales(step: f32, levels: u8) -> Vec<f32> {
     vec![step; 3 * levels as usize + 1]
 }
 
-pub fn load_and_encode(input: &str, params: &Params) -> Result<(Image, Vec<u8>), CliError> {
+pub struct Encoded {
+    pub img: Image,
+    pub settings: (u8, u8, f32, f32),
+    pub bytes: Vec<u8>,
+}
+
+pub fn load_and_encode(input: &str, params: &Params) -> Result<Encoded, CliError> {
     let img = facewave::image::load_grayscale(input)
         .map_err(|e| fail(format!("could not load {input}: {e}")))?;
 
-    let (levels_s, levels_d, step_s, step_d) = params.resolve();
+    let settings = params.resolve();
+    let (levels_s, levels_d, step_s, step_d) = settings;
     let bytes = facewave::encode::encode(
         &img,
         levels_s,
@@ -107,5 +120,9 @@ pub fn load_and_encode(input: &str, params: &Params) -> Result<(Image, Vec<u8>),
         scales(step_d, levels_d),
     );
 
-    Ok((img, bytes))
+    Ok(Encoded {
+        img,
+        settings,
+        bytes,
+    })
 }

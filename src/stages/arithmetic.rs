@@ -190,3 +190,52 @@ fn narrow(low: &mut u32, high: &mut u32, cum_low: u64, cum_high: u64, total: u64
     *high = (base + range * cum_high / total - 1) as u32;
     *low = (base + range * cum_low / total) as u32;
 }
+
+// encode :: [Sym], prob dist -> BitStream
+pub fn encode_adaptive(symbols: &[usize], model: &mut AdaptiveDist, mut trace: Option<&mut Vec<u64>>) -> Vec<u8> {
+    let mut out = BitWriter::new();
+    let mut low: u32 = 0;
+    let mut high: u32 = u32::MAX;
+    let mut pending: u64 = 0;
+
+    fn emit(out: &mut BitWriter, pending: &mut u64, bit: bool) {
+        out.put(bit);
+        for _ in 0..*pending {
+            out.put(!bit);
+        }
+        *pending = 0;
+    }
+
+    for &s in symbols {
+        let total = model.total();
+        narrow(&mut low, &mut high, model.cum(s), model.cum(s + 1), total);
+
+        loop {
+            if high < HALF {
+                emit(&mut out, &mut pending, false);
+            } else if low >= HALF {
+                emit(&mut out, &mut pending, true);
+                low -= HALF;
+                high -= HALF;
+            } else if low >= QUARTER && high < THREE_QUARTERS {
+                pending += 1;
+                low -= QUARTER;
+                high -= QUARTER;
+            } else {
+                break;
+            }
+            low <<= 1;
+            high = (high << 1) | 1;
+        }
+
+        model.update(s);
+        if let Some(t) = trace.as_deref_mut() {
+            t.push(model.fingerprint());
+        }
+    }
+
+    // one bit pins the decoder inside [low, high], the padding reads as zero
+    pending += 1;
+    emit(&mut out, &mut pending, low >= QUARTER);
+    out.finish()
+}

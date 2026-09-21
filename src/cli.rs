@@ -2,6 +2,7 @@
 
 use std::error::Error;
 use std::fmt;
+use std::fs;
 
 use clap::{Args, Parser, Subcommand};
 use facewave::Image;
@@ -36,6 +37,8 @@ pub enum Command {
         #[command(flatten)]
         params: Params,
     },
+    /// Print the header of a .face file
+    Info { input: String },
 }
 
 #[derive(Args)]
@@ -125,4 +128,39 @@ pub fn load_and_encode(input: &str, params: &Params) -> Result<Encoded, CliError
         settings,
         bytes,
     })
+}
+
+// the format stores one step per band; the cli always writes them equal
+fn steps(scales: &[f32]) -> String {
+    match scales {
+        [] => "none".into(),
+        [first, rest @ ..] if rest.iter().all(|s| s == first) => first.to_string(),
+        _ => scales
+            .iter()
+            .map(f32::to_string)
+            .collect::<Vec<_>>()
+            .join(", "),
+    }
+}
+
+pub fn info(input: &str) -> Result<(), CliError> {
+    let bytes = fs::read(input).map_err(|e| fail(format!("could not read {input}: {e}")))?;
+    let (w, h, levels_s, levels_d, t0_s, t0_d, scales_s, scales_d, bytes_s, bytes_d) =
+        facewave::format::unpack(&bytes).map_err(|e| fail(format!("{input}: {e}")))?;
+
+    println!("file        {input} ({} bytes)", bytes.len());
+    println!("dimensions  {w} x {h}");
+    println!("            levels  t0      payload  step");
+    for (name, levels, t0, payload, scales) in [
+        ("symmetric", levels_s, t0_s, &bytes_s, &scales_s),
+        ("difference", levels_d, t0_d, &bytes_d, &scales_d),
+    ] {
+        println!(
+            "{name:<10}  {levels:<6}  {t0:<6}  {:<7}  {}",
+            payload.len(),
+            steps(scales)
+        );
+    }
+
+    Ok(())
 }

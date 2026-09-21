@@ -23,7 +23,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         Command::Decode { input, output } => {
             let bytes =
                 fs::read(&input).map_err(|e| fail(format!("could not read {input}: {e}")))?;
-            let img = facewave::decode::decode(&bytes);
+            let img = facewave::decode::decode(&bytes)
+                .map_err(|e| fail(format!("could not decode {input}: {e}")))?;
             facewave::image::save(&img, &output)
                 .map_err(|e| fail(format!("could not save {output}: {e}")))?;
         }
@@ -33,7 +34,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                 settings: (levels_s, levels_d, step_s, step_d),
                 bytes,
             } = load_and_encode(&input, &params)?;
-            let out = facewave::decode::decode(&bytes);
+            let out = facewave::decode::decode(&bytes)
+                .map_err(|e| fail(format!("could not decode {input}: {e}")))?;
 
             let bpp = 8.0 * bytes.len() as f64 / (img.w * img.h) as f64;
             let psnr = facewave::image::psnr(&img, &out);
@@ -42,6 +44,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 bytes.len()
             );
         }
+        Command::Info { input } => cli::info(&input)?,
     }
 
     Ok(())

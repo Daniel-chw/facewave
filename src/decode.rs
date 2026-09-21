@@ -4,8 +4,8 @@ use crate::format;
 use crate::stages::{arithmetic, dwt, quantise, symmetry, zerotree};
 use crate::Image;
 
-pub fn decode(bytes: &[u8]) -> Image {
-    let (w, h, dwt_depth_s, dwt_depth_d, t0_s, t0_d, scales_s, scales_d, bytes_s, bytes_d) = format::unpack(bytes);
+pub fn decode(bytes: &[u8]) -> Result<Image, String> {
+    let (w, h, dwt_depth_s, dwt_depth_d, t0_s, t0_d, scales_s, scales_d, bytes_s, bytes_d) = format::unpack(bytes)?;
 
     // symmetry::split halves the width, so both half-images are w/2 wide;
     // symmetry::merge restores the full width at the end.
@@ -23,5 +23,5 @@ pub fn decode(bytes: &[u8]) -> Image {
     let s = dwt::inverse_haar(&haar_s);
     let d = dwt::inverse_haar(&haar_d);
 
-    symmetry::merge(&s, &d)
+    Ok(symmetry::merge(&s, &d))
 }

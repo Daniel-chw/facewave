@@ -8,8 +8,19 @@ use clap::{Args, Parser, Subcommand};
 use facewave::Image;
 use facewave::presets::PRESETS;
 
+const EXAMPLES: &str = "\
+Examples:
+  facewave encode face.jpg -o face.face -q 8
+  facewave decode face.face -o face.png
+  facewave eval face.jpg --levels-s 4 --step-s 0.125
+  facewave info face.face";
+
 #[derive(Parser)]
-#[command(version, about = "Wavelet image codec for aligned face photos")]
+#[command(
+    version,
+    about = "Wavelet image codec for aligned face photos",
+    after_help = EXAMPLES
+)]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Command,
@@ -19,26 +30,41 @@ pub struct Cli {
 pub enum Command {
     /// Encode an image into a .face file
     Encode {
+        /// Image to encode (aligned and resized to 128x128)
+        #[arg(value_name = "IMAGE")]
         input: String,
-        #[arg(short, long)]
+        /// Where to write the .face file
+        #[arg(short, long, value_name = "FILE")]
         output: String,
         #[command(flatten)]
         params: Params,
     },
     /// Decode a .face file into an image
     Decode {
+        /// .face file to decode
+        #[arg(value_name = "FILE")]
         input: String,
-        #[arg(short, long)]
+        /// Where to write the image; format follows the extension
+        #[arg(short, long, value_name = "IMAGE")]
         output: String,
     },
     /// Encode and decode in memory, print one CSV row of stats
+    #[command(
+        after_help = "Prints one row to stdout: input,levels_s,levels_d,step_s,step_d,bytes,bpp,psnr"
+    )]
     Eval {
+        /// Image to evaluate
+        #[arg(value_name = "IMAGE")]
         input: String,
         #[command(flatten)]
         params: Params,
     },
     /// Print the header of a .face file
-    Info { input: String },
+    Info {
+        /// .face file to inspect
+        #[arg(value_name = "FILE")]
+        input: String,
+    },
 }
 
 #[derive(Args)]
@@ -46,13 +72,17 @@ pub struct Params {
     /// Quality preset, 1 (smallest) to 10 (best)
     #[arg(short, long, default_value_t = 6, value_parser = clap::value_parser!(u8).range(1..=10))]
     quality: u8,
-    #[arg(long)]
+    /// Wavelet levels for the symmetric half (overrides preset)
+    #[arg(long, value_name = "N")]
     levels_s: Option<u8>,
-    #[arg(long)]
+    /// Wavelet levels for the difference half (overrides preset)
+    #[arg(long, value_name = "N")]
     levels_d: Option<u8>,
-    #[arg(long, value_parser = positive_step)]
+    /// Quantiser step for the symmetric half (overrides preset)
+    #[arg(long, value_name = "STEP", value_parser = positive_step)]
     step_s: Option<f32>,
-    #[arg(long, value_parser = positive_step)]
+    /// Quantiser step for the difference half (overrides preset)
+    #[arg(long, value_name = "STEP", value_parser = positive_step)]
     step_d: Option<f32>,
 }
 

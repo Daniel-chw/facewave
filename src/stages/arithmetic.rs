@@ -1,47 +1,4 @@
-use flate2::write::ZlibEncoder;
-use flate2::read::ZlibDecoder;
-use flate2::Compression;
-use std::io::{Read, Write};
 use crate::Symbol;
-
-fn symbol_to_byte(s: Symbol) -> u8 {
-    match s {
-        Symbol::ZeroTree => 0,
-        Symbol::IsolatedZero => 1,
-        Symbol::Positive => 2,
-        Symbol::Negative => 3,
-        Symbol::RefineOne => 4,
-        Symbol::RefineZero => 5,
-    }
-}
-
-fn byte_to_symbol(b: u8) -> Symbol {
-    match b {
-        0 => Symbol::ZeroTree,
-        1 => Symbol::IsolatedZero,
-        2 => Symbol::Positive,
-        3 => Symbol::Negative,
-        4 => Symbol::RefineOne,
-        5 => Symbol::RefineZero,
-        _ => panic!("invalid symbol byte: {b}"),
-    }
-}
-
-pub fn encode_symbols(symbols: &[Symbol]) -> Vec<u8> {
-    let raw: Vec<u8> = symbols.iter().map(|&s| symbol_to_byte(s)).collect();
-
-    let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
-    encoder.write_all(&raw).unwrap();
-    encoder.finish().unwrap()
-}
-
-pub fn decode_symbols(bytes: &[u8], count: usize) -> Vec<Symbol> {
-    let mut decoder = ZlibDecoder::new(bytes);
-    let mut raw = Vec::new();
-    decoder.read_to_end(&mut raw).unwrap();
-
-    raw.into_iter().take(count).map(byte_to_symbol).collect()
-}
 
 // -------------------- Bit IO --------------------
 
@@ -169,14 +126,7 @@ impl AdaptiveDist {
         }
     }
 
-    fn fingerprint(&self) -> u64 {
-        let mut h: u64 = 0xcbf2_9ce4_8422_2325;
-        for &c in &self.cum {
-            h = (h ^ c as u64).wrapping_mul(0x0000_0100_0000_01b3);
-        }
-        h
     }
-}
 
 // -------------------- Coder --------------------
 
@@ -192,7 +142,7 @@ fn narrow(low: &mut u32, high: &mut u32, cum_low: u64, cum_high: u64, total: u64
 }
 
 // encode :: [Sym], prob dist -> BitStream
-pub fn encode_adaptive(symbols: &[usize], model: &mut AdaptiveDist, mut trace: Option<&mut Vec<u64>>) -> Vec<u8> {
+pub fn encode_adaptive(symbols: &[usize], model: &mut AdaptiveDist) -> Vec<u8> {
     let mut out = BitWriter::new();
     let mut low: u32 = 0;
     let mut high: u32 = u32::MAX;
@@ -229,9 +179,6 @@ pub fn encode_adaptive(symbols: &[usize], model: &mut AdaptiveDist, mut trace: O
         }
 
         model.update(s);
-        if let Some(t) = trace.as_deref_mut() {
-            t.push(model.fingerprint());
-        }
     }
 
     // one bit pins the decoder inside [low, high], the padding reads as zero
@@ -244,7 +191,6 @@ pub fn decode_adaptive(
     bytes: &[u8],
     count: usize,
     model: &mut AdaptiveDist,
-    expected: Option<&[u64]>,
 ) -> Vec<usize> {
     let mut input = BitReader::new(bytes);
     let mut low: u32 = 0;
@@ -255,7 +201,7 @@ pub fn decode_adaptive(
     }
 
     let mut symbols = Vec::with_capacity(count);
-    for i in 0..count {
+    for _ in 0..count {
         let total = model.total();
         let range = (high - low) as u64 + 1;
         let target = (((value - low) as u64 + 1) * total - 1) / range;
@@ -284,9 +230,6 @@ pub fn decode_adaptive(
         }
 
         model.update(s);
-        if let Some(e) = expected {
-            // nothing probably
-        }
     }
 
     symbols
@@ -364,8 +307,8 @@ pub fn encode_symbols(symbols: &[Symbol]) -> Vec<u8> {
         }
     }
 
-    let coded_d = encode_adaptive(&dominant, &mut Context::Dominant.model(), None);
-    let coded_r = encode_adaptive(&refinement, &mut Context::Refinement.model(), None);
+    let coded_d = encode_adaptive(&dominant, &mut Context::Dominant.model());
+    let coded_r = encode_adaptive(&refinement, &mut Context::Refinement.model());
 
     let mut out = Vec::with_capacity(coded_d.len() + coded_r.len() + 12);
     put_varint(&mut out, dominant.len() as u64);
@@ -390,11 +333,11 @@ pub fn decode_symbols(bytes: &[u8]) -> Streams {
 
     Streams {
         dominant: to_symbols(
-            decode_adaptive(coded_d, n_dominant, &mut Context::Dominant.model(), None),
+            decode_adaptive(coded_d, n_dominant, &mut Context::Dominant.model()),
             Context::Dominant,
         ),
         refinement: to_symbols(
-            decode_adaptive(coded_r, n_refinement, &mut Context::Refinement.model(), None),
+            decode_adaptive(coded_r, n_refinement, &mut Context::Refinement.model()),
             Context::Refinement,
         ),
     }

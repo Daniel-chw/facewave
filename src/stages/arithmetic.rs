@@ -120,3 +120,61 @@ fn take_varint(bytes: &[u8], at: &mut usize) -> u64 {
         shift += 7;
     }
 }
+
+// -------------------- Models / Distribtion --------------------
+
+pub const MAX_TOTAL: u32 = 1 << 16;
+
+#[derive(Debug, Clone)]
+pub struct AdaptiveDist {
+    cum: Vec<u32>,
+    cap: u32,
+}
+
+// builds and maintains prob distrabution for encoding, and this updates regularly
+impl AdaptiveDist {
+    pub fn new(n: usize, cap: u32) -> Self {
+        AdaptiveDist { cum: (0..=n as u32).collect(), cap }
+    }
+
+    fn cum(&self, i: usize) -> u64 {
+        self.cum[i] as u64
+    }
+
+    fn total(&self) -> u64 {
+        *self.cum.last().unwrap() as u64
+    }
+
+    fn lookup(&self, target: u64) -> usize {
+        self.cum[1..].iter().position(|&c| target < c as u64).expect("target within total")
+    }
+
+    fn halve(&mut self) {
+        let mut total = 0;
+        for i in 1..self.cum.len() {
+            let f = self.cum[i] - self.cum[i - 1];
+            total += f.div_ceil(2);
+            self.cum[i] = total;
+        }
+    }
+
+    fn update(&mut self, s: usize) {
+
+        for c in &mut self.cum[s + 1..] {
+            *c += 1;
+        }
+
+        if *self.cum.last().unwrap() > self.cap {
+            self.halve();
+        }
+    }
+
+    fn fingerprint(&self) -> u64 {
+        let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+        for &c in &self.cum {
+            h = (h ^ c as u64).wrapping_mul(0x0000_0100_0000_01b3);
+        }
+        h
+    }
+}
+

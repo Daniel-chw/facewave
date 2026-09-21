@@ -239,3 +239,56 @@ pub fn encode_adaptive(symbols: &[usize], model: &mut AdaptiveDist, mut trace: O
     emit(&mut out, &mut pending, low >= QUARTER);
     out.finish()
 }
+
+pub fn decode_adaptive(
+    bytes: &[u8],
+    count: usize,
+    model: &mut AdaptiveDist,
+    expected: Option<&[u64]>,
+) -> Vec<usize> {
+    let mut input = BitReader::new(bytes);
+    let mut low: u32 = 0;
+    let mut high: u32 = u32::MAX;
+    let mut value: u32 = 0;
+    for _ in 0..32 {
+        value = (value << 1) | input.get() as u32;
+    }
+
+    let mut symbols = Vec::with_capacity(count);
+    for i in 0..count {
+        let total = model.total();
+        let range = (high - low) as u64 + 1;
+        let target = (((value - low) as u64 + 1) * total - 1) / range;
+        let s = model.lookup(target);
+
+        narrow(&mut low, &mut high, model.cum(s), model.cum(s + 1), total);
+        symbols.push(s);
+
+        loop {
+            if high < HALF {
+                // do nothing
+            } else if low >= HALF {
+                low -= HALF;
+                high -= HALF;
+                value -= HALF;
+            } else if low >= QUARTER && high < THREE_QUARTERS {
+                low -= QUARTER;
+                high -= QUARTER;
+                value -= QUARTER;
+            } else {
+                break;
+            }
+            low <<= 1;
+            high = (high << 1) | 1;
+            value = (value << 1) | input.get() as u32;
+        }
+
+        model.update(s);
+        if let Some(e) = expected {
+            // nothing probably
+        }
+    }
+
+    symbols
+}
+

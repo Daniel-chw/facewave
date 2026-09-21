@@ -178,3 +178,15 @@ impl AdaptiveDist {
     }
 }
 
+// -------------------- Coder --------------------
+
+const HALF: u32 = 1 << 31;
+const QUARTER: u32 = 1 << 30;
+const THREE_QUARTERS: u32 = 3 << 30;
+
+fn narrow(low: &mut u32, high: &mut u32, cum_low: u64, cum_high: u64, total: u64) {
+    let base = *low as u64;
+    let range = (*high - *low) as u64 + 1;
+    *high = (base + range * cum_high / total - 1) as u32;
+    *low = (base + range * cum_low / total) as u32;
+}

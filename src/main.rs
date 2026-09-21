@@ -8,11 +8,11 @@ struct Args {
     input: String,
     #[arg(long, default_value_t = 4)]
     levels_s: u8,
-    #[arg(long, default_value_t = 4)]
+    #[arg(long, default_value_t = 3)]
     levels_d: u8,
-    #[arg(long, default_value_t = 0.25)]
+    #[arg(long, default_value_t = 0.125)]
     step_s: f32,
-    #[arg(long, default_value_t = 0.25)]
+    #[arg(long, default_value_t = 0.125)]
     step_d: f32,
     /// optional path to write the decoded image to
     #[arg(long, default_value = "output/output.png")]

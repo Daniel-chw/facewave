@@ -11,14 +11,11 @@ pub fn decode(bytes: &[u8]) -> Image {
     // symmetry::merge restores the full width at the end.
     let half_w = w / 2;
 
-    let symbol_count_s = zerotree::symbol_count(half_w, h, t0_s);
-    let symbol_count_d = zerotree::symbol_count(half_w, h, t0_d);
+    let streams_s = arithmetic::decode_symbols(&bytes_s);
+    let streams_d = arithmetic::decode_symbols(&bytes_d);
 
-    let symbols_s = arithmetic::decode_symbols(&bytes_s, symbol_count_s);
-    let symbols_d = arithmetic::decode_symbols(&bytes_d, symbol_count_d);
-
-    let quantised_s = zerotree::unbuild(&symbols_s, t0_s, half_w, h, dwt_depth_s, scales_s);
-    let quantised_d = zerotree::unbuild(&symbols_d, t0_d, half_w, h, dwt_depth_d, scales_d);
+    let quantised_s = zerotree::unbuild_split(&streams_s.dominant, &streams_s.refinement, t0_s, half_w, h, dwt_depth_s, scales_s);
+    let quantised_d = zerotree::unbuild_split(&streams_d.dominant, &streams_d.refinement, t0_d, half_w, h, dwt_depth_d, scales_d);
 
     let haar_s = quantise::dequantise(&quantised_s);
     let haar_d = quantise::dequantise(&quantised_d);

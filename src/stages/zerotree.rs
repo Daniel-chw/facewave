@@ -241,19 +241,28 @@ pub fn build(q:&Quantised) -> (u16, Vec<Symbol>) {
 }
 
 pub fn unbuild(symbols: &[Symbol], t0: u16, w: usize, h: usize, levels: u8, scales: Vec<f32>) -> Quantised {
+    let (dominant, refinement): (Vec<Symbol>, Vec<Symbol>) = symbols
+        .iter()
+        .partition(|&&s| !matches!(s, Symbol::RefineOne | Symbol::RefineZero));
+
+    unbuild_split(&dominant, &refinement, t0, w, h, levels, scales)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn unbuild_split(dominant: &[Symbol], refinement: &[Symbol], t0: u16, w: usize, h: usize, levels: u8, scales: Vec<f32>) -> Quantised {
     let mut q = Quantised { w, h, levels, scales, data: vec![0i16; w * h] };
     let mut significant = vec![false; w * h];
     let mut sig_list: Vec<(usize, usize)> = Vec::new();
-    let mut next = 0;
+    let (mut next_d, mut next_r) = (0, 0);
 
     let mut t = t0;
     while t >= 1 {
         let refine_upto = sig_list.len();
 
-        next += dominant_unpass(&symbols[next..], &mut q.data, t, &mut significant, &mut sig_list, w, h, levels);
+        next_d += dominant_unpass(&dominant[next_d..], &mut q.data, t, &mut significant, &mut sig_list, w, h, levels);
 
         let refine_list = sig_list[..refine_upto].to_vec();
-        next += subordinate_unpass(&mut q, t, &refine_list, &symbols[next..]);
+        next_r += subordinate_unpass(&mut q, t, &refine_list, &refinement[next_r..]);
 
         t /= 2;
     }

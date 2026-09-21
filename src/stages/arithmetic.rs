@@ -292,3 +292,56 @@ pub fn decode_adaptive(
     symbols
 }
 
+// -------------------- EZW Symbols --------------------
+
+// EZW has two passes thus two alphabets
+// must be passed as ccontext into encoder and decoders to handle EZW
+const CONTEXT_CAP: u32 = 1 << 14;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Context {
+    Dominant,
+    Refinement,
+}
+
+impl Context {
+    pub fn of(s: Symbol) -> Self {
+        match s {
+            Symbol::ZeroTree | Symbol::IsolatedZero | Symbol::Positive | Symbol::Negative => {
+                Context::Dominant
+            }
+            Symbol::RefineOne | Symbol::RefineZero => Context::Refinement,
+        }
+    }
+
+    fn model(self) -> AdaptiveDist {
+        match self {
+            Context::Dominant => AdaptiveDist::new(4, CONTEXT_CAP),
+            Context::Refinement => AdaptiveDist::new(2, CONTEXT_CAP),
+        }
+    }
+
+    fn index_of(self, s: Symbol) -> usize {
+        match (self, s) {
+            (Context::Dominant, Symbol::ZeroTree) => 0,
+            (Context::Dominant, Symbol::IsolatedZero) => 1,
+            (Context::Dominant, Symbol::Positive) => 2,
+            (Context::Dominant, Symbol::Negative) => 3,
+            (Context::Refinement, Symbol::RefineZero) => 0,
+            (Context::Refinement, Symbol::RefineOne) => 1,
+            _ => panic!("{s:?} does not belong to {self:?}"),
+        }
+    }
+
+    fn symbol_at(self, i: usize) -> Symbol {
+        match (self, i) {
+            (Context::Dominant, 0) => Symbol::ZeroTree,
+            (Context::Dominant, 1) => Symbol::IsolatedZero,
+            (Context::Dominant, 2) => Symbol::Positive,
+            (Context::Dominant, 3) => Symbol::Negative,
+            (Context::Refinement, 0) => Symbol::RefineZero,
+            (Context::Refinement, 1) => Symbol::RefineOne,
+            _ => panic!("index {i} out of range for {self:?}"),
+        }
+    }
+}

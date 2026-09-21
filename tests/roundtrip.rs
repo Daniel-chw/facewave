@@ -25,7 +25,7 @@ fn encode_decode_roundtrip_is_plausible() {
     let bytes = encode(&original, levels, levels, scales.clone(), scales);
     assert!(!bytes.is_empty(), "encoder produced no bytes");
 
-    let decoded = decode(&bytes);
+    let decoded = decode(&bytes).unwrap();
 
     assert_eq!((decoded.w, decoded.h), (original.w, original.h));
     assert_eq!(decoded.data.len(), original.data.len());

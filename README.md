@@ -18,7 +18,25 @@ on the same aligned image. Compression is relative to raw 8-bit (16,384 B).
 
 ## Running it
 
-BUILD BASIC CLI
+Build:
+```
+cargo build --release
+```
+
+Compress an image and decompress it again:
+```
+./target/release/facewave encode face.jpg -o face.face
+./target/release/facewave decode face.face -o face.png
+```
+
+Quality is set with `-q` from 1 (smallest) to 10 (best), default 6. Each level
+is a preset of transform depth and quantisation step for the two channels,
+taken from the sweep's Pareto front. Individual values can be overridden:
+```
+./target/release/facewave encode face.jpg -o face.face -q 8
+./target/release/facewave encode face.jpg -o face.face --levels-s 4 --step-s 0.125
+```
+
 
 ## Architecture
 

@@ -349,10 +349,10 @@ pub fn decode_symbols(bytes: &[u8]) -> Streams {
 mod adaptive_tests {
     use super::*;
 
-    struct Rng(u64);
+    pub(super) struct Rng(pub(super) u64);
 
     impl Rng {
-        fn next_u64(&mut self) -> u64 {
+        pub(super) fn next_u64(&mut self) -> u64 {
             let mut x = self.0;
             x ^= x >> 12;
             x ^= x << 25;
@@ -361,7 +361,7 @@ mod adaptive_tests {
             x.wrapping_mul(0x2545_F491_4F6C_DD1D)
         }
 
-        fn below(&mut self, n: u64) -> u64 {
+        pub(super) fn below(&mut self, n: u64) -> u64 {
             self.next_u64() % n
         }
     }
@@ -467,6 +467,7 @@ mod adaptive_tests {
 
 #[cfg(test)]
 mod symbol_tests {
+    use super::adaptive_tests::Rng;
     use super::*;
     use crate::Symbol::*;
 

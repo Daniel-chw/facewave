@@ -129,3 +129,7 @@ The coder follows Witten, Neal and Cleary [2].
 [1] J. M. Shapiro, Embedded Image Coding Using Zerotrees of Wavelet Coefficients, IEEE Transactions on Signal Processing, 41(12), 1993.
 
 [2] I. H. Witten, R. M. Neal and J. G. Cleary, Arithmetic Coding for Data Compression, Communications of the ACM, 30(6), 1987.
+
+## License
+
+MIT, see [LICENSE](LICENSE).
